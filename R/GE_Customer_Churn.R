@@ -2,6 +2,8 @@ library(tidymodels)
 library(tidyverse)
 library(here)
 library(corrplot)
+library(randomForest)
+library(rattle)
 
 # data pull
 churn_dataset <- read.csv(here::here('Data/ge_cell_data.csv'))
@@ -100,3 +102,29 @@ CHANGER_hist <- hist(churn_calibration$CHANGER,
                      ylab = 'Frequency',
                      col = 'dodgerblue',
                      freq = TRUE)
+
+# building predictive model
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
