@@ -112,10 +112,10 @@ scoring  <- ! building
 # random forest model 
 
 
-churn_rf <- randomForest::randomForest(as.factor(CHURNDEP) ~ MOU + REFURB + OCCCLER + WEBCAP + MODELS + ROAM + OVERAGE + PRIZMUB + PRZM_NUM + CHANGER,
+churn_rf <- randomForest::randomForest(as.factor(CHURNDEP) ~ . -CHURN -CSA,
                                      data=churn_calibration, 
                                      ntree=1000,
-                                     mtry=5,
+                                     mtry=10,
                                      importance=TRUE,
                                      na.action=randomForest::na.roughfix,
                                      replace=FALSE)
