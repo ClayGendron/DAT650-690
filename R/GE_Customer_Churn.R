@@ -4,6 +4,7 @@ library(here)
 library(corrplot)
 library(randomForest)
 library(rattle)
+library(magrittr)
 
 # data pull
 churn_dataset <- read.csv(here::here('Data/ge_cell_data.csv'))
@@ -105,11 +106,35 @@ CHANGER_hist <- hist(churn_calibration$CHANGER,
 
 # building predictive model
 
+building <- TRUE
+scoring  <- ! building
+
+# random forest model 
 
 
+churn_rf <- randomForest::randomForest(as.factor(CHURNDEP) ~ . -CHURN -CSA,
+                                     data=churn_calibration, 
+                                     ntree=1000,
+                                     mtry=10,
+                                     importance=TRUE,
+                                     na.action=randomForest::na.roughfix,
+                                     replace=FALSE)
+
+# Generate textual output of the 'Random Forest' model.
+
+churn_rf
+
+# The `pROC' package implements various AUC functions.
+
+# Calculate the Area Under the Curve (AUC).
+
+pROC::roc(churn_rf$y, as.numeric(churn_rf$predicted))
 
 
+# List the importance of the variables.
 
+rn <- round(randomForest::importance(churn_rf), 2)
+rn[order(rn[,3], decreasing=TRUE),]
 
 
 
