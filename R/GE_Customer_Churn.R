@@ -104,6 +104,21 @@ CHANGER_hist <- hist(churn_calibration$CHANGER,
                      col = 'dodgerblue',
                      freq = TRUE)
 
+RECCHRGE_hist <- hist(churn_calibration$RECCHRGE,
+                 main = 'RECCHRGE Histogram',
+                 xlab = 'RECCHRGE',
+                 ylab = 'Frequency',
+                 col = 'dodgerblue',
+                 freq = TRUE)
+
+CHANGEM_hist <- hist(churn_calibration$CHANGEM,
+                      main = 'CHANGEM Histogram',
+                      xlab = 'CHANGEM',
+                      ylab = 'Frequency',
+                      col = 'dodgerblue',
+                      freq = TRUE)
+
+
 # building predictive model
 
 building <- TRUE
@@ -136,7 +151,16 @@ pROC::roc(churn_rf$y, as.numeric(churn_rf$predicted))
 rn <- round(randomForest::importance(churn_rf), 2)
 rn[order(rn[,3], decreasing=TRUE),]
 
+# K-Means Clustering Model
 
+k_table <- churn_calibration %>% dplyr::select(CHANGEM, RECCHRGE, EQPDAYS, OUTCALLS, OPEAKVCE, INCALLS, WEBCAP, MOUREC, MAILRES, MOU, CHURNDEP)
+
+k_mod <- kmeans(k_table,centers = 4, nstart = 100)
+k_mod
+
+# build table
+
+pva_clusters <- cbind(pva, k_mod$cluster)
 
 
 
