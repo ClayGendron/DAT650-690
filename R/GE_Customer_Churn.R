@@ -153,9 +153,23 @@ rn[order(rn[,3], decreasing=TRUE),]
 
 # K-Means Clustering Model
 
-k_table <- churn_calibration %>% dplyr::select(CHANGEM, RECCHRGE, EQPDAYS, OUTCALLS, OPEAKVCE, INCALLS, WEBCAP, MOUREC, MAILRES, MOU, CHURNDEP)
+mod_rec_k_means <- recipe(CHURNDEP ~ ., data = churn_calibration) %>% 
+  step_center(
+    CHANGEM, RECCHRGE, EQPDAYS, OUTCALLS, OPEAKVCE, INCALLS, WEBCAP, MOUREC, MAILRES, MOU
+  ) %>%
+  step_scale(
+    CHANGEM, RECCHRGE, EQPDAYS, OUTCALLS, OPEAKVCE, INCALLS, WEBCAP, MOUREC, MAILRES, MOU
+  )
 
-k_mod <- kmeans(k_table,centers = 4, nstart = 100)
+k_prep <- prep(mod_rec_k_means, training = churn_calibration)
+k_table <- bake(k_prep, churn_calibration)
+
+
+
+k_table <- k_table %>% dplyr::select(CHANGEM, RECCHRGE, EQPDAYS, OUTCALLS, OPEAKVCE, INCALLS, WEBCAP, MOUREC, MAILRES, MOU, CHURNDEP)
+k_table <- na.omit(k_table)
+
+k_mod <- kmeans(k_table,centers = 10, nstart = 500)
 k_mod
 
 # build table
