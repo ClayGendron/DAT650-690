@@ -24,6 +24,9 @@ library(coefplot)
 library(skimr)
 library(recipes)
 library(dygraphs)
+library(lattice)
+library(caret)
+library(rattle)
 ```
 
 ## Data Pull and Split
@@ -35,6 +38,7 @@ churn_dataset <- read.csv(here::here('Data/ge_cell_data.csv'))
 
 # cal and val tables
 
+set.seed(1379)
 churn_split <- initial_split(churn_dataset, prop = .75, strata = CHURN)
 
 churn_calibration <- training(churn_split)
@@ -115,7 +119,7 @@ m_rec1 <- recipe(CHURN ~ ., data = test) %>%
   step_knnimpute(all_predictors()) %>% 
   step_nzv(all_predictors()) %>% 
   step_normalize(all_numeric(), - CHURN) %>% 
-  step_BoxCox(all_numeric(), - CHURN) 
+  step_BoxCox(all_numeric(), - CHURN)
 
 m_prep1 <- prep(m_rec1, training = train)
 
@@ -140,25 +144,50 @@ m_test_xg <- xgb.DMatrix(data = m_test_x, label = m_test_y)
 
 ```{r Build Prediction Model - Tree XG Boost}
 
+# XG Boost Model
+
 xgb_churn_mod <- xgb.train(
   data = m_train_xg,
   lambda = 2,
-  max_depth = 4,
-  nrounds = 16,
+  max_depth = 3,
+  nrounds = 10,
   objective = 'binary:logistic',
   booster = 'gbtree',
   watchlist = list(train = m_train_xg, validate = m_test_xg),
   print_every_n = 1
 )
 
-xgb.plot.multi.trees(xgb_churn_mod)
-dygraph(xgb_churn_mod$evaluation_log)
-xgb.importance(model = xgb_churn_mod)
-CHURN_P <- predict(xgb_churn_mod,m_test_xg)
-CHURN_P <- as.numeric(CHURN_P > 0.5)
-val_table <- cbind(m_test,CHURN_P)
+xgb.plot.multi.trees(xgb_churn_mod) # Plot the Tree
+dygraph(xgb_churn_mod$evaluation_log) # Validate Test and Train
+xgb.importance(model = xgb_churn_mod) # Identify Important Predictors
+CHURN_Rank <- predict(xgb_churn_mod,m_test_xg) # Predict Churn
+CHURN_P <- as.numeric(CHURN_Rank > 0.5) # Make Prediction Binary
+val_table <- cbind(m_test,CHURN_P,CHURN_Rank) # Join to Table
 
 ```
 
+## Evaluating Model Performance - Tree XG Boost
+
+```{r}
+
+# Confusion Matrix
+
+cf_churn <- table(val_table$CHURN,val_table$CHURN_P)
+caret::confusionMatrix(cf_churn)
+
+test_pred <- as.numeric(test_p$posterior[,c(2)])
+test_lab <- as.numeric(nb_test$CARAVAN)
+
+test_riskchart <- riskchart(CHURN_Rank,
+                    val_table$CHURN, 
+                    title="Customer Churn Outreach", 
+                    recall.name="Churn Prediction", precision.name = "Strick Rate",
+                    show.lift=TRUE, show.precision=TRUE, legend.horiz=FALSE, show.maximal = TRUE)
+print(test_riskchart)
+
+
+
+
+```
 
 
