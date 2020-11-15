@@ -22,6 +22,7 @@ library(rsample)
 library(glmnet)
 library(coefplot)
 library(skimr)
+library(recipes)
 ```
 
 ## Data Pull and Split
@@ -54,13 +55,12 @@ var_mod1 <- lm(
 )
 summary(var_mod1)
 
-# eliminate non important predictors variables - keep top 25 predictors
+# eliminate non important predictors variables - keep top 20 predictors
 var_mod2 <- lm(
   CHURNDEP ~ 
     PRIZMRUR + CHANGEM + MAILORD + PHONES + MOUREC + 
     CHANGER + PRZM_NUM + PRIZMUB + OVERAGE + ROAM + 
     MODELS + WEBCAP + OCCCLER + REFURB + MOU +
-    CUSTOMER + TRAVEL + CALLFWDV + DROPVCE + CALLWAIT + 
     DROPBLK + BLCKVCE + CREDITGY + RETCALLS + SETPRC, 
   data=churn_calibration
 )
@@ -70,7 +70,34 @@ coefplot(var_mod2, sort = "magnitude")
 
 ## Data Visualizations
 
-ggplot(churn_calibration, aes(x = MOU, fill = CHURNDEP)) + geom_histogram()
+# histograms and bars
+
+ggplot(churn_calibration, aes(x = PRIZMRUR)) + geom_bar()
+ggplot(churn_calibration, aes(x = CHANGEM)) + geom_histogram()
+ggplot(churn_calibration, aes(x = MAILORD)) + geom_bar()
+ggplot(churn_calibration, aes(x = PHONES)) + geom_bar()
+ggplot(churn_calibration, aes(x = MOUREC)) + geom_histogram()
+ggplot(churn_calibration, aes(x = CHANGER)) + geom_histogram()
+ggplot(churn_calibration, aes(x = PRZM_NUM)) + geom_histogram()
+ggplot(churn_calibration, aes(x = PRIZMUB)) + geom_bar()
+ggplot(churn_calibration, aes(x = OVERAGE)) + geom_histogram()
+ggplot(churn_calibration, aes(x = ROAM)) + geom_histogram()
+ggplot(churn_calibration, aes(x = MODELS)) + geom_bar()
+ggplot(churn_calibration, aes(x = WEBCAP)) + geom_bar()
+ggplot(churn_calibration, aes(x = OCCCLER)) + geom_bar()
+ggplot(churn_calibration, aes(x = REFURB)) + geom_bar()
+ggplot(churn_calibration, aes(x = MOU)) + geom_histogram()
+ggplot(churn_calibration, aes(x = DROPBLK)) + geom_histogram()
+ggplot(churn_calibration, aes(x = BLCKVCE)) + geom_histogram()
+ggplot(churn_calibration, aes(x = CREDITGY)) + geom_bar()
+ggplot(churn_calibration, aes(x = RETCALLS)) + geom_bar()
+ggplot(churn_calibration, aes(x = SETPRC)) + geom_bar()
+
+```
+
+## Recipies and Data Manipulations
+
+```{r}
 
 ```
 
