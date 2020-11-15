@@ -39,7 +39,7 @@ churn_dataset <- read.csv(here::here('Data/ge_cell_data.csv'))
 # cal and val tables
 
 set.seed(1379)
-churn_split <- initial_split(churn_dataset, prop = .75, strata = CHURN)
+churn_split <- initial_split(churn_dataset, prop = .8, strata = CHURN)
 
 churn_calibration <- training(churn_split)
 churn_validation <- testing(churn_split)
@@ -114,7 +114,7 @@ test <- churn_validation %>% select(CUSTOMER, MOU, REFURB, OCCCLER, WEBCAP, MODE
 
 # recipes
 
-m_rec1 <- recipe(CHURN ~ ., data = test) %>% 
+m_rec1 <- recipe(CHURN ~ ., data = train) %>% 
   step_rm(CUSTOMER) %>% 
   step_knnimpute(all_predictors()) %>% 
   step_nzv(all_predictors()) %>% 
@@ -130,12 +130,12 @@ m_test <- bake(m_prep1, new_data = test)
 
 # build matrix
 
-m_train_x <- bake(m_prep1, new_data = train, all_predictors(), composition = "matrix")
-m_train_y <- bake(m_prep1, new_data = train, all_outcomes(), composition = "matrix")
+m_train_x <- bake(m_prep1, new_data = m_train, all_predictors(), composition = "matrix")
+m_train_y <- bake(m_prep1, new_data = m_train, all_outcomes(), composition = "matrix")
 m_train_xg <- xgb.DMatrix(data = m_train_x, label = m_train_y)
 
-m_test_x <- bake(m_prep1, new_data = test, all_predictors(), composition = "matrix")
-m_test_y <- bake(m_prep1, new_data = test, all_outcomes(), composition = "matrix")
+m_test_x <- bake(m_prep1, new_data = m_test, all_predictors(), composition = "matrix")
+m_test_y <- bake(m_prep1, new_data = m_test, all_outcomes(), composition = "matrix")
 m_test_xg <- xgb.DMatrix(data = m_test_x, label = m_test_y)
 
 ```
@@ -148,8 +148,7 @@ m_test_xg <- xgb.DMatrix(data = m_test_x, label = m_test_y)
 
 xgb_churn_mod <- xgb.train(
   data = m_train_xg,
-  lambda = 2,
-  max_depth = 3,
+  max_depth = 4,
   nrounds = 10,
   objective = 'binary:logistic',
   booster = 'gbtree',
@@ -160,9 +159,14 @@ xgb_churn_mod <- xgb.train(
 xgb.plot.multi.trees(xgb_churn_mod) # Plot the Tree
 dygraph(xgb_churn_mod$evaluation_log) # Validate Test and Train
 xgb.importance(model = xgb_churn_mod) # Identify Important Predictors
-CHURN_Rank <- predict(xgb_churn_mod,m_test_xg) # Predict Churn
-CHURN_P <- as.numeric(CHURN_Rank > 0.5) # Make Prediction Binary
-val_table <- cbind(m_test,CHURN_P,CHURN_Rank) # Join to Table
+
+CHURN_Rank_XGB <- predict(xgb_churn_mod,m_test_xg) # Predict Churn
+CHURN_P_XGB <- as.numeric(CHURN_Rank_XGB > 0.50) # Make Prediction Binary
+val_table <- cbind(m_test,CHURN_P_XGB,CHURN_Rank_XGB) # Join to Test Table
+
+CHURN_Rank_Train <- predict(xgb_churn_mod,m_train_xg) # Predict Churn
+CHURN_P_Train <- as.numeric(CHURN_Rank_Train > 0.50) # Make Prediction Binary
+val_table_train <- cbind(m_train,CHURN_P_Train,CHURN_Rank_Train) # Join to Train Table
 
 ```
 
@@ -172,22 +176,102 @@ val_table <- cbind(m_test,CHURN_P,CHURN_Rank) # Join to Table
 
 # Confusion Matrix
 
-cf_churn <- table(val_table$CHURN,val_table$CHURN_P)
+# test
+cf_churn <- table(val_table$CHURN,val_table$CHURN_P_XGB)
 caret::confusionMatrix(cf_churn)
 
-test_pred <- as.numeric(test_p$posterior[,c(2)])
-test_lab <- as.numeric(nb_test$CARAVAN)
+# train
+cf_churn_train <- table(val_table_train$CHURN,val_table_train$CHURN_P_Train)
+caret::confusionMatrix(cf_churn_train)
+
+# Risk Chart
+
+test_riskchart <- riskchart(CHURN_Rank_XGB,
+                    val_table$CHURN, 
+                    title="Customer Outreach", 
+                    recall.name="Churn Prediction", precision.name = "Strick Rate",
+                    show.lift=TRUE, show.precision=TRUE, legend.horiz=FALSE, show.maximal = TRUE)
+print(test_riskchart)
+
+```
+
+## Build Prediction Model - K Means Clustering
+
+```{r}
+
+
+k_train <- m_train %>% dplyr::select(CHURN, CHANGEM, MOU, CHANGER, DROPBLK, MOUREC) %>% na.omit()
+k_test <- m_test %>% dplyr::select(CHURN, CHANGEM, MOU, CHANGER, DROPBLK, MOUREC) %>% na.omit()
+
+set.seed(9731)
+k_mod <- kmeans(k_train,centers = 10, nstart = 500)
+k_mod
+CUST_Clusters_Train <- k_mod$cluster
+cluster_train <- cbind(k_train, CUST_Clusters_Train)
+
+# create cluster group table
+
+ge_cust_clusters1 <- aggregate.data.frame(cluster_train$CHURN, 
+                          by = list(CUST_Clusters_Train),
+                          FUN = mean)
+colnames(ge_cust_clusters)
+
+ge_cust_clusters2 <- ge_cust_clusters1 %>% 
+  rename("CUST_Cluster" = "Group.1", "CHURN_Rank_KN" = "x")
+
+ge_cust_clusters3 <- ge_cust_clusters2[order(ge_cust_clusters2$CHURN_Rank_KN),]
+
+cluster_rank <- data.frame(c(10:1))
+colnames(cluster_rank)
+cluster_rank <- cluster_rank %>% rename("Customer_Group" = "c.10.1.")
+
+ge_cust_clusters <- cbind(ge_cust_clusters3,cluster_rank)
+
+# Add Clusters to Validation Table
+
+CUST_Cluster <- predict(k_mod, k_test)
+
+cluster_table <- cbind(val_table, CUST_Cluster)
+cluster_table2 <- merge(x = cluster_table, y = ge_cust_clusters, by.x = "CUST_Cluster", by.y = "CUST_Cluster")
+CHURN_Rank <- (cluster_table2$CHURN_Rank_XGB + cluster_table2$CHURN_Rank_KN) / 2
+CHURN_P <- as.numeric(CHURN_Rank > 0.50) # Make Prediction Binary
+cluster_table3 <- cbind(cluster_table2,CHURN_P,CHURN_Rank)
+
+cf_churn_final <- table(cluster_table3$CHURN,cluster_table3$CHURN_P)
+caret::confusionMatrix(cf_churn_final)
+
 
 test_riskchart <- riskchart(CHURN_Rank,
-                    val_table$CHURN, 
-                    title="Customer Churn Outreach", 
+                    cluster_table3$CHURN, 
+                    title="Customer Outreach", 
                     recall.name="Churn Prediction", precision.name = "Strick Rate",
                     show.lift=TRUE, show.precision=TRUE, legend.horiz=FALSE, show.maximal = TRUE)
 print(test_riskchart)
 
 
 
+# data cleanup 
 
+emas_data_df_id <- merge(x = emas_data_df, y = id_df, by.x = "EMASID", by.y = "EMASID")
+freshmen_df <- merge(x = emas_data_df_id, y = dev_data_df, by.x = c("StudentID","StartTerm"), by.y = c("StudentID","EntryTerm"))
+freshmen_df <- merge(x = freshmen_df, y = event_data_df, by.x = "StudentID", by.y = "ID")
+colnames(freshmen_df)
+sapply(freshmen_df, class)
+freshmen_df$`HSGPA` <- as.numeric(freshmen_df$`HSGPA`)
+colnames(freshmen_df)
+names(freshmen_df)[18] <- paste("RaceEthnicity")
+colnames(freshmen_df)
+
+skim(freshmen_df)
+
+# training data frame
+train_df <- freshmen_df %>% filter(
+  `StartTerm` != "20FADAY",
+  `StartTerm` != "19FADAY",
+  `StartTerm` != "15FADAY"
+)
+
+cluster_table <- cbind(val_table, CUST_Cluster)
+pva_clusters <- cbind(pva, k_mod$cluster)
 ```
-
 
