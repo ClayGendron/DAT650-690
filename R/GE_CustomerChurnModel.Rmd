@@ -37,7 +37,6 @@ library(rattle)
 churn_dataset <- read.csv(here::here('Data/ge_cell_data.csv'))
 
 # cal and val tables
-
 set.seed(1379)
 churn_split <- initial_split(churn_dataset, prop = .8, strata = CHURN)
 
@@ -105,7 +104,7 @@ ggplot(churn_calibration, aes(x = DROPBLK)) + geom_histogram()
 ## Recipes and Data Manipulations
 
 ```{r Recipes and Data Manipulations}
-## Keep Relevent Columns
+## Keep Relevent Columns Create Test and Train Datasets
 
 train <- churn_calibration %>% select(CUSTOMER, MOU, REFURB, OCCCLER, WEBCAP, MODELS, ROAM, OVERAGE, PRIZMUB, PRZM_NUM, CHANGER, MOUREC, PHONES, MAILORD, CHANGEM, PRIZMRUR, SETPRC, RETCALLS, CREDITGY, BLCKVCE, DROPBLK, CHURN)
 test <- churn_validation %>% select(CUSTOMER, MOU, REFURB, OCCCLER, WEBCAP, MODELS, ROAM, OVERAGE, PRIZMUB, PRZM_NUM, CHANGER, MOUREC, PHONES, MAILORD, CHANGEM, PRIZMRUR, SETPRC, RETCALLS, CREDITGY, BLCKVCE, DROPBLK, CHURN)
@@ -199,17 +198,19 @@ print(test_riskchart)
 
 ```{r}
 
+# Build Modeling Tables
 
 k_train <- m_train %>% dplyr::select(CHURN, CHANGEM, MOU, CHANGER, DROPBLK, MOUREC) %>% na.omit()
 k_test <- m_test %>% dplyr::select(CHURN, CHANGEM, MOU, CHANGER, DROPBLK, MOUREC) %>% na.omit()
 
+# Create K Means Model
 set.seed(9731)
-k_mod <- kmeans(k_train,centers = 10, nstart = 500)
+k_mod <- kmeans(k_train,centers = 10, nstart = 500) 
 k_mod
 CUST_Clusters_Train <- k_mod$cluster
 cluster_train <- cbind(k_train, CUST_Clusters_Train)
 
-# create cluster group table
+# Create Cluster Churn Probability Table
 
 ge_cust_clusters1 <- aggregate.data.frame(cluster_train$CHURN, 
                           by = list(CUST_Clusters_Train),
@@ -217,9 +218,9 @@ ge_cust_clusters1 <- aggregate.data.frame(cluster_train$CHURN,
 colnames(ge_cust_clusters)
 
 ge_cust_clusters2 <- ge_cust_clusters1 %>% 
-  rename("CUST_Cluster" = "Group.1", "CHURN_Rank_KN" = "x")
+  rename("CUST_Cluster" = "Group.1", "CHURN_Rank_KM" = "x")
 
-ge_cust_clusters3 <- ge_cust_clusters2[order(ge_cust_clusters2$CHURN_Rank_KN),]
+ge_cust_clusters3 <- ge_cust_clusters2[order(ge_cust_clusters2$CHURN_Rank_KM),]
 
 cluster_rank <- data.frame(c(10:1))
 colnames(cluster_rank)
@@ -227,13 +228,13 @@ cluster_rank <- cluster_rank %>% rename("Customer_Group" = "c.10.1.")
 
 ge_cust_clusters <- cbind(ge_cust_clusters3,cluster_rank)
 
-# Add Clusters to Validation Table
+# Add Cluster Probabilities to Validation Table
 
 CUST_Cluster <- predict(k_mod, k_test)
 
 cluster_table <- cbind(val_table, CUST_Cluster)
 cluster_table2 <- merge(x = cluster_table, y = ge_cust_clusters, by.x = "CUST_Cluster", by.y = "CUST_Cluster")
-CHURN_Rank <- (cluster_table2$CHURN_Rank_XGB + cluster_table2$CHURN_Rank_KN) / 2
+CHURN_Rank <- (cluster_table2$CHURN_Rank_XGB + cluster_table2$CHURN_Rank_KM) / 2
 CHURN_P <- as.numeric(CHURN_Rank > 0.50) # Make Prediction Binary
 cluster_table3 <- cbind(cluster_table2,CHURN_P,CHURN_Rank)
 
@@ -248,28 +249,6 @@ test_riskchart <- riskchart(CHURN_Rank,
                     show.lift=TRUE, show.precision=TRUE, legend.horiz=FALSE, show.maximal = TRUE)
 print(test_riskchart)
 
-
-
-# data cleanup 
-
-emas_data_df_id <- merge(x = emas_data_df, y = id_df, by.x = "EMASID", by.y = "EMASID")
-freshmen_df <- merge(x = emas_data_df_id, y = dev_data_df, by.x = c("StudentID","StartTerm"), by.y = c("StudentID","EntryTerm"))
-freshmen_df <- merge(x = freshmen_df, y = event_data_df, by.x = "StudentID", by.y = "ID")
-colnames(freshmen_df)
-sapply(freshmen_df, class)
-freshmen_df$`HSGPA` <- as.numeric(freshmen_df$`HSGPA`)
-colnames(freshmen_df)
-names(freshmen_df)[18] <- paste("RaceEthnicity")
-colnames(freshmen_df)
-
-skim(freshmen_df)
-
-# training data frame
-train_df <- freshmen_df %>% filter(
-  `StartTerm` != "20FADAY",
-  `StartTerm` != "19FADAY",
-  `StartTerm` != "15FADAY"
-)
 
 cluster_table <- cbind(val_table, CUST_Cluster)
 pva_clusters <- cbind(pva, k_mod$cluster)
