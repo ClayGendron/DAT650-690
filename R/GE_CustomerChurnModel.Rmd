@@ -23,6 +23,7 @@ library(glmnet)
 library(coefplot)
 library(skimr)
 library(recipes)
+library(dygraphs)
 ```
 
 ## Data Pull and Split
@@ -34,8 +35,10 @@ churn_dataset <- read.csv(here::here('Data/ge_cell_data.csv'))
 
 # cal and val tables
 
-churn_calibration <- churn_dataset %>% filter(CALIBRAT == 1)
-churn_validation <- churn_dataset %>% filter(CALIBRAT == 0)
+churn_split <- initial_split(churn_dataset, prop = .75, strata = CHURN)
+
+churn_calibration <- training(churn_split)
+churn_validation <- testing(churn_split)
 
 ```
 
@@ -50,19 +53,19 @@ names(churn_dataset)
 skim(churn_dataset)
 
 # eliminate non usefull variables
-var_mod1 <- lm(
-  CHURNDEP ~ . - CHURN - CSA - OCC_LABEL, data=churn_calibration
+var_mod1 <- glm(
+  CHURN ~ . - CHURNDEP - CALIBRAT - CSA - OCC_LABEL, data=churn_dataset, family = binomial
 )
 summary(var_mod1)
 
 # eliminate non important predictors variables - keep top 20 predictors
 var_mod2 <- lm(
-  CHURNDEP ~ 
-    PRIZMRUR + CHANGEM + MAILORD + PHONES + MOUREC + 
-    CHANGER + PRZM_NUM + PRIZMUB + OVERAGE + ROAM + 
-    MODELS + WEBCAP + OCCCLER + REFURB + MOU +
-    DROPBLK + BLCKVCE + CREDITGY + RETCALLS + SETPRC, 
-  data=churn_calibration
+  CHURN ~ 
+    MOU + REFURB + OCCCLER + WEBCAP + MODELS + 
+    ROAM + OVERAGE + PRIZMUB + PRZM_NUM + CHANGER + 
+    MOUREC + PHONES + MAILORD + CHANGEM + PRIZMRUR + 
+    SETPRC + RETCALLS + CREDITGY + BLCKVCE + DROPBLK, 
+  data=churn_calibration, family = binomial
 )
 summary(var_mod2)
 
@@ -72,32 +75,88 @@ coefplot(var_mod2, sort = "magnitude")
 
 # histograms and bars
 
-ggplot(churn_calibration, aes(x = PRIZMRUR)) + geom_bar()
-ggplot(churn_calibration, aes(x = CHANGEM)) + geom_histogram()
-ggplot(churn_calibration, aes(x = MAILORD)) + geom_bar()
-ggplot(churn_calibration, aes(x = PHONES)) + geom_bar()
-ggplot(churn_calibration, aes(x = MOUREC)) + geom_histogram()
-ggplot(churn_calibration, aes(x = CHANGER)) + geom_histogram()
-ggplot(churn_calibration, aes(x = PRZM_NUM)) + geom_histogram()
-ggplot(churn_calibration, aes(x = PRIZMUB)) + geom_bar()
-ggplot(churn_calibration, aes(x = OVERAGE)) + geom_histogram()
-ggplot(churn_calibration, aes(x = ROAM)) + geom_histogram()
-ggplot(churn_calibration, aes(x = MODELS)) + geom_bar()
-ggplot(churn_calibration, aes(x = WEBCAP)) + geom_bar()
-ggplot(churn_calibration, aes(x = OCCCLER)) + geom_bar()
-ggplot(churn_calibration, aes(x = REFURB)) + geom_bar()
 ggplot(churn_calibration, aes(x = MOU)) + geom_histogram()
-ggplot(churn_calibration, aes(x = DROPBLK)) + geom_histogram()
-ggplot(churn_calibration, aes(x = BLCKVCE)) + geom_histogram()
-ggplot(churn_calibration, aes(x = CREDITGY)) + geom_bar()
-ggplot(churn_calibration, aes(x = RETCALLS)) + geom_bar()
+ggplot(churn_calibration, aes(x = REFURB)) + geom_bar()
+ggplot(churn_calibration, aes(x = OCCCLER)) + geom_bar()
+ggplot(churn_calibration, aes(x = WEBCAP)) + geom_bar()
+ggplot(churn_calibration, aes(x = MODELS)) + geom_bar()
+ggplot(churn_calibration, aes(x = ROAM)) + geom_histogram()
+ggplot(churn_calibration, aes(x = OVERAGE)) + geom_histogram()
+ggplot(churn_calibration, aes(x = PRIZMUB)) + geom_bar()
+ggplot(churn_calibration, aes(x = PRZM_NUM)) + geom_bar()
+ggplot(churn_calibration, aes(x = CHANGER)) + geom_histogram()
+ggplot(churn_calibration, aes(x = MOUREC)) + geom_histogram()
+ggplot(churn_calibration, aes(x = PHONES)) + geom_bar()
+ggplot(churn_calibration, aes(x = MAILORD)) + geom_bar()
+ggplot(churn_calibration, aes(x = CHANGEM)) + geom_histogram()
+ggplot(churn_calibration, aes(x = PRIZMRUR)) + geom_bar()
 ggplot(churn_calibration, aes(x = SETPRC)) + geom_bar()
+ggplot(churn_calibration, aes(x = RETCALLS)) + geom_bar()
+ggplot(churn_calibration, aes(x = CREDITGY)) + geom_bar()
+ggplot(churn_calibration, aes(x = BLCKVCE)) + geom_histogram()
+ggplot(churn_calibration, aes(x = DROPBLK)) + geom_histogram()
 
 ```
 
-## Recipies and Data Manipulations
+## Recipes and Data Manipulations
 
-```{r}
+```{r Recipes and Data Manipulations}
+## Keep Relevent Columns
+
+train <- churn_calibration %>% select(CUSTOMER, MOU, REFURB, OCCCLER, WEBCAP, MODELS, ROAM, OVERAGE, PRIZMUB, PRZM_NUM, CHANGER, MOUREC, PHONES, MAILORD, CHANGEM, PRIZMRUR, SETPRC, RETCALLS, CREDITGY, BLCKVCE, DROPBLK, CHURN)
+test <- churn_validation %>% select(CUSTOMER, MOU, REFURB, OCCCLER, WEBCAP, MODELS, ROAM, OVERAGE, PRIZMUB, PRZM_NUM, CHANGER, MOUREC, PHONES, MAILORD, CHANGEM, PRIZMRUR, SETPRC, RETCALLS, CREDITGY, BLCKVCE, DROPBLK, CHURN)
+
+## Recipes and Data Manipulations
+
+# recipes
+
+m_rec1 <- recipe(CHURN ~ ., data = test) %>% 
+  step_rm(CUSTOMER) %>% 
+  step_knnimpute(all_predictors()) %>% 
+  step_nzv(all_predictors()) %>% 
+  step_normalize(all_numeric(), - CHURN) %>% 
+  step_BoxCox(all_numeric(), - CHURN) 
+
+m_prep1 <- prep(m_rec1, training = train)
+
+# bake
+
+m_train <- bake(m_prep1, new_data = train)
+m_test <- bake(m_prep1, new_data = test)
+
+# build matrix
+
+m_train_x <- bake(m_prep1, new_data = train, all_predictors(), composition = "matrix")
+m_train_y <- bake(m_prep1, new_data = train, all_outcomes(), composition = "matrix")
+m_train_xg <- xgb.DMatrix(data = m_train_x, label = m_train_y)
+
+m_test_x <- bake(m_prep1, new_data = test, all_predictors(), composition = "matrix")
+m_test_y <- bake(m_prep1, new_data = test, all_outcomes(), composition = "matrix")
+m_test_xg <- xgb.DMatrix(data = m_test_x, label = m_test_y)
+
+```
+
+## Build Prediction Model - Tree XG Boost
+
+```{r Build Prediction Model - Tree XG Boost}
+
+xgb_churn_mod <- xgb.train(
+  data = m_train_xg,
+  lambda = 2,
+  max_depth = 4,
+  nrounds = 16,
+  objective = 'binary:logistic',
+  booster = 'gbtree',
+  watchlist = list(train = m_train_xg, validate = m_test_xg),
+  print_every_n = 1
+)
+
+xgb.plot.multi.trees(xgb_churn_mod)
+dygraph(xgb_churn_mod$evaluation_log)
+xgb.importance(model = xgb_churn_mod)
+CHURN_P <- predict(xgb_churn_mod,m_test_xg)
+CHURN_P <- as.numeric(CHURN_P > 0.5)
+val_table <- cbind(m_test,CHURN_P)
 
 ```
 
