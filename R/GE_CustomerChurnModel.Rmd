@@ -3,6 +3,8 @@ title: "GE_CustomerChurnModel"
 author: "Clay Gendron"
 date: "11/14/2020"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ## Library Setup
@@ -18,6 +20,8 @@ library(xgboost)
 library(ggplot2)
 library(rsample)
 library(glmnet)
+library(coefplot)
+library(skimr)
 ```
 
 ## Data Pull and Split
@@ -36,9 +40,37 @@ churn_validation <- churn_dataset %>% filter(CALIBRAT == 0)
 
 ## Explorting Data
 
-```{r}
+```{r EDA}
 
-# variable selection
+## Variable Selection for EDA Visuals
+
+# output column names and summarise data
+names(churn_dataset)
+skim(churn_dataset)
+
+# eliminate non usefull variables
+var_mod1 <- lm(
+  CHURNDEP ~ . - CHURN - CSA - OCC_LABEL, data=churn_calibration
+)
+summary(var_mod1)
+
+# eliminate non important predictors variables - keep top 25 predictors
+var_mod2 <- lm(
+  CHURNDEP ~ 
+    PRIZMRUR + CHANGEM + MAILORD + PHONES + MOUREC + 
+    CHANGER + PRZM_NUM + PRIZMUB + OVERAGE + ROAM + 
+    MODELS + WEBCAP + OCCCLER + REFURB + MOU +
+    CUSTOMER + TRAVEL + CALLFWDV + DROPVCE + CALLWAIT + 
+    DROPBLK + BLCKVCE + CREDITGY + RETCALLS + SETPRC, 
+  data=churn_calibration
+)
+summary(var_mod2)
+
+coefplot(var_mod2, sort = "magnitude")
+
+## Data Visualizations
+
+ggplot(churn_calibration, aes(x = MOU, fill = CHURNDEP)) + geom_histogram()
 
 ```
 
