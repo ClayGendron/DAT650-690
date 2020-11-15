@@ -5,6 +5,7 @@ library(corrplot)
 library(randomForest)
 library(rattle)
 library(magrittr)
+library(xgboost)
 
 # data pull
 churn_dataset <- read.csv(here::here('Data/ge_cell_data.csv'))

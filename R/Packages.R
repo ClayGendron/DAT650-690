@@ -1,0 +1,12 @@
+## Packages Needed for Model
+
+install.packages("tidymodels")
+install.packages("tidyverse")
+install.packages("here")
+install.packages("corrplot")
+install.packages("randomForest")
+install.packages("magrittr")
+install.packages("xgboost")
+install.packages("ggplot2")
+install.packages("rsample")
+install.packages("glmnet")
