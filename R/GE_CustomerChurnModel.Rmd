@@ -189,7 +189,7 @@ caret::confusionMatrix(cf_churn_train)
 test_riskchart <- riskchart(CHURN_Rank_XGB,
                     val_table$CHURN, 
                     title="Customer Outreach", 
-                    recall.name="Churn Prediction", precision.name = "Strick Rate",
+                    recall.name="Churn Prediction", precision.name = "Strike Rate",
                     show.lift=TRUE, show.precision=TRUE, legend.horiz=FALSE, show.maximal = TRUE)
 print(test_riskchart) # chart to understand how the predictions impact operational caseloads
 
@@ -268,7 +268,7 @@ caret::confusionMatrix(cf_ge_churn)
 test_riskchart <- riskchart(ge_cust_churn_df$CHURN_Rank,
                     ge_cust_churn_df$CHURN, 
                     title="Customer Outreach", 
-                    recall.name="Churn Prediction", precision.name = "Strick Rate",
+                    recall.name="Churn Prediction", precision.name = "Strike Rate",
                     show.lift=TRUE, show.precision=TRUE, legend.horiz=FALSE, show.maximal = TRUE)
 print(test_riskchart)
 
