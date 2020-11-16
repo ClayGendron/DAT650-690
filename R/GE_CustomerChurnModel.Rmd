@@ -149,6 +149,7 @@ m_test_xg <- xgb.DMatrix(data = m_test_x, label = m_test_y)
 xgb_churn_mod <- xgb.train(
   data = m_train_xg,
   max_depth = 4,
+  lambda = 1,
   nrounds = 10,
   objective = 'binary:logistic',
   booster = 'gbtree',
@@ -161,11 +162,11 @@ dygraph(xgb_churn_mod$evaluation_log) # validate test and train
 xgb.importance(model = xgb_churn_mod) # identify important predictors
 
 CHURN_Rank_XGB <- predict(xgb_churn_mod,m_test_xg) # predict churn on test
-CHURN_P_XGB <- as.numeric(CHURN_Rank_XGB > 0.50) # make prediction binary for cf matrix
+CHURN_P_XGB <- as.numeric(CHURN_Rank_XGB > 0.30) # make prediction binary for cf matrix
 val_table <- cbind(m_test_id,CHURN_P_XGB,CHURN_Rank_XGB) # join to single table
 
 CHURN_Rank_Train <- predict(xgb_churn_mod,m_train_xg) # predict churn for test
-CHURN_P_Train <- as.numeric(CHURN_Rank_Train > 0.50) # binary prediction for test
+CHURN_P_Train <- as.numeric(CHURN_Rank_Train > 0.30) # binary prediction for test
 val_table_train <- cbind(m_train,CHURN_P_Train,CHURN_Rank_Train) # join to single table
 
 ```
@@ -186,12 +187,12 @@ caret::confusionMatrix(cf_churn_train)
 
 # Risk Chart
 
-test_riskchart <- riskchart(CHURN_Rank_XGB,
+xgb_riskchart <- riskchart(CHURN_Rank_XGB,
                     val_table$CHURN, 
                     title="Customer Outreach", 
                     recall.name="Churn Prediction", precision.name = "Strike Rate",
                     show.lift=TRUE, show.precision=TRUE, legend.horiz=FALSE, show.maximal = TRUE)
-print(test_riskchart) # chart to understand how the predictions impact operational caseloads
+print(xgb_riskchart) # chart to understand how the predictions impact operational caseloads
 
 ```
 
@@ -201,22 +202,22 @@ print(test_riskchart) # chart to understand how the predictions impact operation
 
 # Build Modeling Tables
 
-k_train <- m_train %>% dplyr::select(CHURN, CHANGEM, MOU, CHANGER, DROPBLK, MOUREC) %>% na.omit()
-k_test <- m_test_id %>% dplyr::select(CUSTOMER, CHURN, CHANGEM, MOU, CHANGER, DROPBLK, MOUREC) %>% na.omit()
+k_train <- m_train %>% dplyr::select(CHANGEM, MOU, CHANGER, DROPBLK, MOUREC, REFURB, OVERAGE, ROAM, PRIZMUB, SETPRC, MAILORD, BLCKVCE, MODELS, PRIZMRUR) %>% na.omit()
+k_test <- m_test_id %>% dplyr::select(CUSTOMER, CHANGEM, MOU, CHANGER, DROPBLK, MOUREC, REFURB, OVERAGE, ROAM, PRIZMUB, SETPRC, MAILORD, BLCKVCE, MODELS, PRIZMRUR) %>% na.omit()
 
 # Create K Means Model
 set.seed(9731) # for reporduction
 k_mod <- kmeans(k_train,centers = 10, nstart = 500) 
 k_mod
 CUST_Clusters_Train <- k_mod$cluster # cluster assignement outputs
-cluster_train <- cbind(k_train, CUST_Clusters_Train) # training dataset with clusters
+cluster_train <- cbind(m_train, CUST_Clusters_Train) # training dataset with clusters
 
 # Create Cluster Churn Probability Table
 
 ge_cust_clusters1 <- aggregate.data.frame(cluster_train$CHURN, 
                           by = list(CUST_Clusters_Train),
                           FUN = mean) # table to have CHURN probabilities by cluster
-colnames(ge_cust_clusters)
+colnames(ge_cust_clusters1)
 
 ge_cust_clusters2 <- ge_cust_clusters1 %>% 
   rename("CUST_Cluster" = "Group.1", "CHURN_Rank_KM" = "x")
@@ -241,7 +242,7 @@ CUST_Cluster <- predict(k_mod, val_table) # predict cluster or test data
 cluster_table <- cbind(val_table, CUST_Cluster)
 cluster_table2 <- merge(x = cluster_table, y = ge_cust_clusters, by.x = "CUST_Cluster", by.y = "CUST_Cluster") # add cluster CHURN probabilities
 CHURN_Rank <- (cluster_table2$CHURN_Rank_XGB + cluster_table2$CHURN_Rank_KM) / 2 # average XGB probabilities with KM cluster probabilities
-CHURN_P <- as.numeric(CHURN_Rank > 0.50) # make aggregated prediction binary
+CHURN_P <- as.numeric(CHURN_Rank > 0.30) # make aggregated prediction binary
 cluster_table3 <- cbind(cluster_table2,CHURN_P,CHURN_Rank) 
 colnames(cluster_table3)
 cluster_table4 <- cluster_table3 %>% select(CUSTOMER, CHURN, CHURN_Rank_XGB, CHURN_Rank_KM, CHURN_Rank, CHURN_P, Customer_Group)
@@ -265,12 +266,12 @@ caret::confusionMatrix(cf_ge_churn)
 
 # Caseload Analysis
 
-test_riskchart <- riskchart(ge_cust_churn_df$CHURN_Rank,
+ge_riskchart <- riskchart(ge_cust_churn_df$CHURN_Rank,
                     ge_cust_churn_df$CHURN, 
                     title="Customer Outreach", 
                     recall.name="Churn Prediction", precision.name = "Strike Rate",
                     show.lift=TRUE, show.precision=TRUE, legend.horiz=FALSE, show.maximal = TRUE)
-print(test_riskchart)
+print(ge_riskchart) # chart to understand how the predictions impact operational caseloads
 
 ```
 
