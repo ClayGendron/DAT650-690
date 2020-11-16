@@ -29,7 +29,7 @@ library(caret)
 library(rattle)
 ```
 
-## Data Pull and Split
+## Data Pull and Initial Split
 
 ```{r Data}
 
@@ -37,11 +37,11 @@ library(rattle)
 churn_dataset <- read.csv(here::here('Data/ge_cell_data.csv'))
 
 # cal and val tables
-set.seed(1379)
-churn_split <- initial_split(churn_dataset, prop = .8, strata = CHURN)
+set.seed(1379) # for reproduction
+churn_split <- initial_split(churn_dataset, prop = .8, strata = CHURN) # create calibration and validation datasets
 
-churn_calibration <- training(churn_split)
-churn_validation <- testing(churn_split)
+churn_calibration <- training(churn_split) # train
+churn_validation <- testing(churn_split) # test
 
 ```
 
@@ -59,7 +59,7 @@ skim(churn_dataset)
 var_mod1 <- glm(
   CHURN ~ . - CHURNDEP - CALIBRAT - CSA - OCC_LABEL, data=churn_dataset, family = binomial
 )
-summary(var_mod1)
+summary(var_mod1) # identify roughly significant variables to explore
 
 # eliminate non important predictors variables - keep top 20 predictors
 var_mod2 <- lm(
@@ -72,7 +72,7 @@ var_mod2 <- lm(
 )
 summary(var_mod2)
 
-coefplot(var_mod2, sort = "magnitude")
+coefplot(var_mod2, sort = "magnitude") # rough understanding of correlation to CHURN
 
 ## Data Visualizations
 
@@ -114,11 +114,11 @@ test <- churn_validation %>% select(CUSTOMER, MOU, REFURB, OCCCLER, WEBCAP, MODE
 # recipes
 
 m_rec1 <- recipe(CHURN ~ ., data = train) %>% 
-  step_rm(CUSTOMER) %>% 
-  step_knnimpute(all_predictors()) %>% 
-  step_nzv(all_predictors()) %>% 
-  step_normalize(all_numeric(), - CHURN) %>% 
-  step_BoxCox(all_numeric(), - CHURN)
+  step_rm(CUSTOMER) %>% # remove customer ID
+  step_knnimpute(all_predictors()) %>% # impute any missing variables for modeling purposes
+  step_nzv(all_predictors()) %>% # remove variables that are highly spare or unbalanced
+  step_normalize(all_numeric(), - CHURN) %>% # mean of 0 and sd of 1 for all numeric variables
+  step_BoxCox(all_numeric(), - CHURN) # simple Box-Cox transformation
 
 m_prep1 <- prep(m_rec1, training = train)
 
@@ -126,8 +126,9 @@ m_prep1 <- prep(m_rec1, training = train)
 
 m_train <- bake(m_prep1, new_data = train)
 m_test <- bake(m_prep1, new_data = test)
+m_test_id <- cbind(test$CUSTOMER, m_test) %>% rename("CUSTOMER" = "test$CUSTOMER")
 
-# build matrix
+# build matrix for XG Boost
 
 m_train_x <- bake(m_prep1, new_data = m_train, all_predictors(), composition = "matrix")
 m_train_y <- bake(m_prep1, new_data = m_train, all_outcomes(), composition = "matrix")
@@ -155,17 +156,17 @@ xgb_churn_mod <- xgb.train(
   print_every_n = 1
 )
 
-xgb.plot.multi.trees(xgb_churn_mod) # Plot the Tree
-dygraph(xgb_churn_mod$evaluation_log) # Validate Test and Train
-xgb.importance(model = xgb_churn_mod) # Identify Important Predictors
+xgb.plot.multi.trees(xgb_churn_mod) # plot the tree
+dygraph(xgb_churn_mod$evaluation_log) # validate test and train
+xgb.importance(model = xgb_churn_mod) # identify important predictors
 
-CHURN_Rank_XGB <- predict(xgb_churn_mod,m_test_xg) # Predict Churn
-CHURN_P_XGB <- as.numeric(CHURN_Rank_XGB > 0.50) # Make Prediction Binary
-val_table <- cbind(m_test,CHURN_P_XGB,CHURN_Rank_XGB) # Join to Test Table
+CHURN_Rank_XGB <- predict(xgb_churn_mod,m_test_xg) # predict churn on test
+CHURN_P_XGB <- as.numeric(CHURN_Rank_XGB > 0.50) # make prediction binary for cf matrix
+val_table <- cbind(m_test_id,CHURN_P_XGB,CHURN_Rank_XGB) # join to single table
 
-CHURN_Rank_Train <- predict(xgb_churn_mod,m_train_xg) # Predict Churn
-CHURN_P_Train <- as.numeric(CHURN_Rank_Train > 0.50) # Make Prediction Binary
-val_table_train <- cbind(m_train,CHURN_P_Train,CHURN_Rank_Train) # Join to Train Table
+CHURN_Rank_Train <- predict(xgb_churn_mod,m_train_xg) # predict churn for test
+CHURN_P_Train <- as.numeric(CHURN_Rank_Train > 0.50) # binary prediction for test
+val_table_train <- cbind(m_train,CHURN_P_Train,CHURN_Rank_Train) # join to single table
 
 ```
 
@@ -190,7 +191,7 @@ test_riskchart <- riskchart(CHURN_Rank_XGB,
                     title="Customer Outreach", 
                     recall.name="Churn Prediction", precision.name = "Strick Rate",
                     show.lift=TRUE, show.precision=TRUE, legend.horiz=FALSE, show.maximal = TRUE)
-print(test_riskchart)
+print(test_riskchart) # chart to understand how the predictions impact operational caseloads
 
 ```
 
@@ -201,20 +202,20 @@ print(test_riskchart)
 # Build Modeling Tables
 
 k_train <- m_train %>% dplyr::select(CHURN, CHANGEM, MOU, CHANGER, DROPBLK, MOUREC) %>% na.omit()
-k_test <- m_test %>% dplyr::select(CHURN, CHANGEM, MOU, CHANGER, DROPBLK, MOUREC) %>% na.omit()
+k_test <- m_test_id %>% dplyr::select(CUSTOMER, CHURN, CHANGEM, MOU, CHANGER, DROPBLK, MOUREC) %>% na.omit()
 
 # Create K Means Model
-set.seed(9731)
+set.seed(9731) # for reporduction
 k_mod <- kmeans(k_train,centers = 10, nstart = 500) 
 k_mod
-CUST_Clusters_Train <- k_mod$cluster
-cluster_train <- cbind(k_train, CUST_Clusters_Train)
+CUST_Clusters_Train <- k_mod$cluster # cluster assignement outputs
+cluster_train <- cbind(k_train, CUST_Clusters_Train) # training dataset with clusters
 
 # Create Cluster Churn Probability Table
 
 ge_cust_clusters1 <- aggregate.data.frame(cluster_train$CHURN, 
                           by = list(CUST_Clusters_Train),
-                          FUN = mean)
+                          FUN = mean) # table to have CHURN probabilities by cluster
 colnames(ge_cust_clusters)
 
 ge_cust_clusters2 <- ge_cust_clusters1 %>% 
@@ -222,35 +223,54 @@ ge_cust_clusters2 <- ge_cust_clusters1 %>%
 
 ge_cust_clusters3 <- ge_cust_clusters2[order(ge_cust_clusters2$CHURN_Rank_KM),]
 
-cluster_rank <- data.frame(c(10:1))
+cluster_rank <- data.frame(c(10:1)) # for reordering cluster numbers to make logical sense
 colnames(cluster_rank)
 cluster_rank <- cluster_rank %>% rename("Customer_Group" = "c.10.1.")
 
-ge_cust_clusters <- cbind(ge_cust_clusters3,cluster_rank)
+ge_cust_clusters <- cbind(ge_cust_clusters3,cluster_rank) # cluster groups table
 
-# Add Cluster Probabilities to Validation Table
+```
 
-CUST_Cluster <- predict(k_mod, k_test)
+## Add Cluster Probabilities to XG Boost Probabilities
+
+```{r Final Analytic Model}
+# Create Aggregated Prediction
+
+CUST_Cluster <- predict(k_mod, val_table) # predict cluster or test data
 
 cluster_table <- cbind(val_table, CUST_Cluster)
-cluster_table2 <- merge(x = cluster_table, y = ge_cust_clusters, by.x = "CUST_Cluster", by.y = "CUST_Cluster")
-CHURN_Rank <- (cluster_table2$CHURN_Rank_XGB + cluster_table2$CHURN_Rank_KM) / 2
-CHURN_P <- as.numeric(CHURN_Rank > 0.50) # Make Prediction Binary
-cluster_table3 <- cbind(cluster_table2,CHURN_P,CHURN_Rank)
+cluster_table2 <- merge(x = cluster_table, y = ge_cust_clusters, by.x = "CUST_Cluster", by.y = "CUST_Cluster") # add cluster CHURN probabilities
+CHURN_Rank <- (cluster_table2$CHURN_Rank_XGB + cluster_table2$CHURN_Rank_KM) / 2 # average XGB probabilities with KM cluster probabilities
+CHURN_P <- as.numeric(CHURN_Rank > 0.50) # make aggregated prediction binary
+cluster_table3 <- cbind(cluster_table2,CHURN_P,CHURN_Rank) 
+colnames(cluster_table3)
+cluster_table4 <- cluster_table3 %>% select(CUSTOMER, CHURN, CHURN_Rank_XGB, CHURN_Rank_KM, CHURN_Rank, CHURN_P, Customer_Group)
 
-cf_churn_final <- table(cluster_table3$CHURN,cluster_table3$CHURN_P)
-caret::confusionMatrix(cf_churn_final)
+# exportable table
+test_minus_CHURN <- select(churn_validation, -c("CHURN"))
+ge_cust_churn_df <- merge(x = test_minus_CHURN, y = cluster_table4, by.x = "CUSTOMER", by.y = "CUSTOMER")
+summary(ge_cust_churn_df)
 
+write.csv(ge_cust_churn_df,here::here('Data/ge_cust_churn_predictions.csv'))
+```
 
-test_riskchart <- riskchart(CHURN_Rank,
-                    cluster_table3$CHURN, 
+# Model Evaluation
+
+```{r Final Model Assessment}
+
+# Confusion Matrix
+
+cf_ge_churn <- table(ge_cust_churn_df$CHURN,ge_cust_churn_df$CHURN_P)
+caret::confusionMatrix(cf_ge_churn)
+
+# Caseload Analysis
+
+test_riskchart <- riskchart(ge_cust_churn_df$CHURN_Rank,
+                    ge_cust_churn_df$CHURN, 
                     title="Customer Outreach", 
                     recall.name="Churn Prediction", precision.name = "Strick Rate",
                     show.lift=TRUE, show.precision=TRUE, legend.horiz=FALSE, show.maximal = TRUE)
 print(test_riskchart)
 
-
-cluster_table <- cbind(val_table, CUST_Cluster)
-pva_clusters <- cbind(pva, k_mod$cluster)
 ```
 
