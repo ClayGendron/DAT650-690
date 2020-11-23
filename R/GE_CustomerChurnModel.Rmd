@@ -252,17 +252,44 @@ test_minus_CHURN <- select(churn_validation, -c("CHURN"))
 ge_cust_churn_df <- merge(x = test_minus_CHURN, y = cluster_table4, by.x = "CUSTOMER", by.y = "CUSTOMER")
 summary(ge_cust_churn_df)
 
-write.csv(ge_cust_churn_df,here::here('Data/ge_cust_churn_predictions.csv'))
 ```
+
+# Logistic Regression
+
+```{r}
+
+log_churn_mod <- glm(
+  CHURN ~ CHANGEM + MOU + CHANGER + DROPBLK + MOUREC + REFURB + OVERAGE + ROAM + PRIZMUB + SETPRC + MAILORD + BLCKVCE + MODELS + PRIZMRUR, 
+  data = m_train, 
+  family = binomial("logit")
+)
+
+summary(log_churn_mod)
+
+CHURN_Rank_log <- predict(log_churn_mod, m_test, type = "response")
+CHURN_P_log <- as.numeric(CHURN_Rank_log > 0.30)
+log_p_df <- cbind(m_test_id,CHURN_Rank_log,CHURN_P_log)
+log_df_merge <- log_p_df %>% select(CUSTOMER,CHURN_Rank_log,CHURN_P_log)
+
+ge_cust_churn_df <- merge(x = ge_cust_churn_df, y = log_df_merge, by.x = "CUSTOMER", by.y = "CUSTOMER")
+
+```
+
 
 # Model Evaluation
 
 ```{r Final Model Assessment}
+# Export Dataset
+
+write.csv(ge_cust_churn_df,here::here('Data/ge_cust_churn_predictions.csv'))
 
 # Confusion Matrix
 
 cf_ge_churn <- table(ge_cust_churn_df$CHURN,ge_cust_churn_df$CHURN_P)
 caret::confusionMatrix(cf_ge_churn)
+
+cf_ge_churn_log <- table(ge_cust_churn_df$CHURN,ge_cust_churn_df$CHURN_P_log)
+caret::confusionMatrix(cf_ge_churn_log)
 
 # Caseload Analysis
 
@@ -272,6 +299,13 @@ ge_riskchart <- riskchart(ge_cust_churn_df$CHURN_Rank,
                     recall.name="Churn Prediction", precision.name = "Strike Rate",
                     show.lift=TRUE, show.precision=TRUE, legend.horiz=FALSE, show.maximal = TRUE)
 print(ge_riskchart) # chart to understand how the predictions impact operational caseloads
+
+ge_riskchart_log <- riskchart(ge_cust_churn_df$CHURN_Rank_log,
+                    ge_cust_churn_df$CHURN, 
+                    title="Customer Outreach", 
+                    recall.name="Churn Prediction", precision.name = "Strike Rate",
+                    show.lift=TRUE, show.precision=TRUE, legend.horiz=FALSE, show.maximal = TRUE)
+print(ge_riskchart_log) # chart to understand how the predictions impact operational caseloads
 
 ```
 
