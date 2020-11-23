@@ -173,7 +173,7 @@ val_table_train <- cbind(m_train,CHURN_P_Train,CHURN_Rank_Train) # join to singl
 
 ## Evaluating Model Performance - Tree XG Boost
 
-```{r}
+```{r XG Boost Evaluation}
 
 # Confusion Matrix
 
@@ -198,7 +198,7 @@ print(xgb_riskchart) # chart to understand how the predictions impact operationa
 
 ## Build Prediction Model - K Means Clustering
 
-```{r}
+```{r K Means}
 
 # Build Modeling Tables
 
@@ -256,7 +256,9 @@ summary(ge_cust_churn_df)
 
 # Logistic Regression
 
-```{r}
+```{r Logistic Regression}
+
+# Create Model
 
 log_churn_mod <- glm(
   CHURN ~ CHANGEM + MOU + CHANGER + DROPBLK + MOUREC + REFURB + OVERAGE + ROAM + PRIZMUB + SETPRC + MAILORD + BLCKVCE + MODELS + PRIZMRUR, 
@@ -265,6 +267,8 @@ log_churn_mod <- glm(
 )
 
 summary(log_churn_mod)
+
+# Create Prediction
 
 CHURN_Rank_log <- predict(log_churn_mod, m_test, type = "response")
 CHURN_P_log <- as.numeric(CHURN_Rank_log > 0.30)
